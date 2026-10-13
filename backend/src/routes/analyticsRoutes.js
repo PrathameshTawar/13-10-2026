@@ -3,37 +3,76 @@ const router = express.Router();
 const Event = require('../models/Event');
 const Session = require('../models/Session');
 
+// Admin protection helper for sensitive mutations
+function checkAdminAccess(req, res, next) {
+  // If NODE_ENV is production, enforce X-Admin-Key header
+  if (process.env.NODE_ENV === 'production') {
+    const adminKey = req.headers['x-admin-key'] || req.query.admin_key;
+    const requiredKey = process.env.ADMIN_KEY || 'causalfunnel-admin-key';
+    if (!adminKey || adminKey !== requiredKey) {
+      return res.status(403).json({
+        error: 'Unauthorized. Protected endpoint requires a valid X-Admin-Key header in production.'
+      });
+    }
+  }
+  next();
+}
+
 /**
  * GET /api/analytics/clicks
  * Fetch click data for a page (for heatmap visualization)
- * Query params: url (string), limit (number)
+ * Query params: url (string), viewport (string: 'all' | 'desktop' | 'tablet' | 'mobile')
  */
 router.get('/clicks', async (req, res) => {
   try {
-    const rawUrl = req.query.url ? String(req.query.url).trim() : '';
+    const rawTarget = req.query.url ? String(req.query.url).trim() : '';
+    const viewportFilter = req.query.viewport ? String(req.query.viewport).toLowerCase() : 'all';
 
-    if (!rawUrl) {
-      return res.status(400).json({ error: 'A "url" query parameter is required (e.g. ?url=http://... or pathname)' });
+    if (!rawTarget) {
+      return res.status(400).json({ error: 'A "url" query parameter is required (e.g. ?url=/demo/index.html)' });
     }
 
-    // Flexible URL matching: match full URL or match ending pathname
-    const urlPattern = new RegExp(rawUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i');
+    // Extract path from input if a full URL was provided
+    let targetPath = rawTarget;
+    try {
+      const parsed = new URL(rawTarget);
+      targetPath = parsed.pathname;
+    } catch (e) {
+      targetPath = rawTarget.split('?')[0].split('#')[0];
+      if (!targetPath.startsWith('/') && !targetPath.startsWith('http')) {
+        targetPath = `/${targetPath}`;
+      }
+    }
 
-    const clicks = await Event.find({
+    // Query using exact path or exact URL (indexed)
+    const query = {
       eventType: 'click',
       $or: [
-        { pageUrl: rawUrl },
-        { pageUrl: { $regex: urlPattern } }
+        { pagePath: targetPath },
+        { pageUrl: rawTarget }
       ]
-    })
-      .select('sessionId timestamp x y clientX clientY viewport target pageUrl')
+    };
+
+    // Apply viewport filter if specified
+    if (viewportFilter === 'desktop') {
+      query['viewport.width'] = { $gte: 1024 };
+    } else if (viewportFilter === 'tablet') {
+      query['viewport.width'] = { $gte: 768, $lt: 1024 };
+    } else if (viewportFilter === 'mobile') {
+      query['viewport.width'] = { $lt: 768 };
+    }
+
+    const clicks = await Event.find(query)
+      .select('sessionId timestamp x y xPct yPct docWidth docHeight clientX clientY viewport target pageUrl pagePath')
       .sort({ timestamp: -1 })
-      .limit(1000)
+      .limit(1500)
       .lean();
 
     // Calculate click density stats & top clicked elements
     const elementCounts = {};
     let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    let maxDocWidth = 0;
+    let maxDocHeight = 0;
 
     for (const c of clicks) {
       if (c.x != null && c.y != null) {
@@ -42,6 +81,8 @@ router.get('/clicks', async (req, res) => {
         if (c.y < minY) minY = c.y;
         if (c.y > maxY) maxY = c.y;
       }
+      if (c.docWidth && c.docWidth > maxDocWidth) maxDocWidth = c.docWidth;
+      if (c.docHeight && c.docHeight > maxDocHeight) maxDocHeight = c.docHeight;
 
       const key = `${c.target?.tagName || 'ELEMENT'}:${c.target?.text || c.target?.id || 'unknown'}`;
       elementCounts[key] = (elementCounts[key] || 0) + 1;
@@ -53,8 +94,13 @@ router.get('/clicks', async (req, res) => {
       .map(([element, count]) => ({ element, count }));
 
     return res.json({
-      pageUrl: rawUrl,
+      pageUrl: rawTarget,
+      pagePath: targetPath,
       totalClicks: clicks.length,
+      pageDimensions: {
+        docWidth: maxDocWidth || 1200,
+        docHeight: maxDocHeight || 1200
+      },
       bounds: clicks.length ? { minX, maxX, minY, maxY } : null,
       topElements,
       clicks
@@ -74,7 +120,8 @@ router.get('/pages', async (req, res) => {
     const pages = await Event.aggregate([
       {
         $group: {
-          _id: '$pageUrl',
+          _id: '$pagePath',
+          fullUrl: { $first: '$pageUrl' },
           totalEvents: { $sum: 1 },
           pageViews: {
             $sum: { $cond: [{ $eq: ['$eventType', 'page_view'] }, 1, 0] }
@@ -88,7 +135,8 @@ router.get('/pages', async (req, res) => {
       },
       {
         $project: {
-          pageUrl: '$_id',
+          pagePath: '$_id',
+          pageUrl: '$fullUrl',
           totalEvents: 1,
           pageViews: 1,
           clicks: 1,
@@ -117,13 +165,23 @@ router.get('/overview', async (req, res) => {
     const totalClicks = await Event.countDocuments({ eventType: 'click' });
     const totalPageViews = await Event.countDocuments({ eventType: 'page_view' });
 
-    // Calculate average session duration
+    // Calculate average session duration dynamically from sessions
     const durationStats = await Session.aggregate([
+      {
+        $project: {
+          duration: {
+            $cond: [
+              { $and: ['$firstSeen', '$lastSeen', { $gte: ['$lastSeen', '$firstSeen'] }] },
+              { $divide: [{ $subtract: ['$lastSeen', '$firstSeen'] }, 1000] },
+              0
+            ]
+          }
+        }
+      },
       {
         $group: {
           _id: null,
-          avgDuration: { $avg: '$durationSeconds' },
-          maxDuration: { $max: '$durationSeconds' }
+          avgDuration: { $avg: '$duration' }
         }
       }
     ]);
@@ -150,9 +208,9 @@ router.get('/overview', async (req, res) => {
 
 /**
  * DELETE /api/analytics/reset
- * Clean database for fresh testing
+ * Clean database for fresh testing (protected by admin check)
  */
-router.delete('/reset', async (req, res) => {
+router.delete('/reset', checkAdminAccess, async (req, res) => {
   try {
     await Event.deleteMany({});
     await Session.deleteMany({});

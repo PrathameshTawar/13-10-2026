@@ -16,30 +16,37 @@ const Session = require('./models/Session');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Middleware
+// Enable CORS for all origins
 app.use(cors({ origin: '*' }));
-app.use(morgan('dev'));
 
-// Support application/json and text/plain (used by sendBeacon Blob)
+if (process.env.NODE_ENV !== 'test') {
+  app.use(morgan('dev'));
+}
+
+// Support application/json and text/plain (used by sendBeacon Blob without triggering CORS preflights)
 app.use(express.json({ limit: '1mb' }));
-app.use(express.text({ type: 'text/plain', limit: '1mb' }));
+app.use(express.text({ type: ['text/plain', 'application/json'], limit: '1mb' }));
 
 // Middleware to parse text/plain body into JSON if sendBeacon sent string
 app.use((req, res, next) => {
-  if (typeof req.body === 'string' && req.body.trim().startsWith('{') || typeof req.body === 'string' && req.body.trim().startsWith('[')) {
+  if (typeof req.body === 'string') {
     try {
-      req.body = JSON.parse(req.body);
+      const trimmed = req.body.trim();
+      if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+        req.body = JSON.parse(trimmed);
+      }
     } catch (e) {}
   }
   next();
 });
 
-// Serve client tracker script directly at /tracker.js
-app.get('/tracker.js', (req, res) => {
+// Serve client tracker script directly at /tracker.js and /tracker.min.js
+app.get(['/tracker.js', '/tracker.min.js'], (req, res) => {
   res.sendFile(path.resolve(__dirname, '../../tracker/tracker.js'), {
     headers: {
       'Content-Type': 'application/javascript; charset=utf-8',
-      'Access-Control-Allow-Origin': '*'
+      'Access-Control-Allow-Origin': '*',
+      'Cache-Control': 'public, max-age=3600'
     }
   });
 });
@@ -66,8 +73,16 @@ app.use('/api', eventRoutes);
 app.use('/api', sessionRoutes);
 app.use('/api/analytics', analyticsRoutes);
 
-// Seed API endpoint
+// Seed API endpoint (protected in production)
 app.post('/api/seed', async (req, res) => {
+  if (process.env.NODE_ENV === 'production') {
+    const adminKey = req.headers['x-admin-key'] || req.query.admin_key;
+    const requiredKey = process.env.ADMIN_KEY || 'causalfunnel-admin-key';
+    if (!adminKey || adminKey !== requiredKey) {
+      return res.status(403).json({ error: 'Unauthorized: Valid X-Admin-Key header required in production mode.' });
+    }
+  }
+
   try {
     await seedAnalyticsData();
     res.json({ success: true, message: 'Demo analytics data seeded successfully' });
@@ -87,7 +102,7 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Internal server error', details: err.message });
 });
 
-// Start Server & Connect Database
+// Start Server & Connect Database (only when run directly, not during test imports)
 async function startServer() {
   try {
     await connectDB();
@@ -115,4 +130,8 @@ async function startServer() {
   }
 }
 
-startServer();
+if (require.main === module) {
+  startServer();
+}
+
+module.exports = app;

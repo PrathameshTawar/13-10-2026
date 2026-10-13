@@ -3,6 +3,7 @@
  */
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/+$/, '');
+const ADMIN_KEY = import.meta.env.VITE_ADMIN_KEY || 'causalfunnel-admin-key';
 
 async function handleResponse(res) {
   if (!res.ok) {
@@ -22,7 +23,7 @@ export const api = {
     return handleResponse(res);
   },
 
-  async getSessions(page = 1, limit = 20, search = '') {
+  async getSessions(page = 1, limit = 25, search = '') {
     const params = new URLSearchParams({ page, limit });
     if (search) params.append('search', search);
     const res = await fetch(`${API_BASE}/api/sessions?${params.toString()}`);
@@ -39,19 +40,33 @@ export const api = {
     return handleResponse(res);
   },
 
-  async getClicks(pageUrl) {
+  async getClicks(pageUrl, viewport = 'all') {
     const params = new URLSearchParams({ url: pageUrl });
+    if (viewport && viewport !== 'all') {
+      params.append('viewport', viewport);
+    }
     const res = await fetch(`${API_BASE}/api/analytics/clicks?${params.toString()}`);
     return handleResponse(res);
   },
 
   async seedData() {
-    const res = await fetch(`${API_BASE}/api/seed`, { method: 'POST' });
+    const res = await fetch(`${API_BASE}/api/seed`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Admin-Key': ADMIN_KEY
+      }
+    });
     return handleResponse(res);
   },
 
   async resetData() {
-    const res = await fetch(`${API_BASE}/api/analytics/reset`, { method: 'DELETE' });
+    const res = await fetch(`${API_BASE}/api/analytics/reset`, {
+      method: 'DELETE',
+      headers: {
+        'X-Admin-Key': ADMIN_KEY
+      }
+    });
     return handleResponse(res);
   }
 };

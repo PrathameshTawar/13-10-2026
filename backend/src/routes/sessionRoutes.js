@@ -19,13 +19,26 @@ router.get('/sessions', async (req, res) => {
     }
 
     const totalSessions = await Session.countDocuments(query);
-    const sessions = await Session.find(query)
+    const rawSessions = await Session.find(query)
       .sort({ lastSeen: -1 })
       .skip((page - 1) * limit)
       .limit(limit)
       .lean();
 
-    // If no sessions in Session collection yet, query Event collection directly
+    // Compute durationSeconds dynamically at read time from firstSeen & lastSeen
+    const sessions = rawSessions.map(s => {
+      const first = s.firstSeen ? new Date(s.firstSeen).getTime() : 0;
+      const last = s.lastSeen ? new Date(s.lastSeen).getTime() : 0;
+      const durationSeconds = (first && last && last >= first)
+        ? Math.round((last - first) / 1000)
+        : 0;
+      return {
+        ...s,
+        durationSeconds
+      };
+    });
+
+    // Fallback if no sessions exist in Session collection yet: aggregate directly from Event
     if (sessions.length === 0 && totalSessions === 0) {
       const fallbackSessions = await Event.aggregate([
         {
@@ -39,7 +52,9 @@ router.get('/sessions', async (req, res) => {
               $sum: { $cond: [{ $eq: ['$eventType', 'page_view'] }, 1, 0] }
             },
             firstSeen: { $min: '$timestamp' },
-            lastSeen: { $max: '$timestamp' }
+            lastSeen: { $max: '$timestamp' },
+            entryPage: { $first: '$pageUrl' },
+            exitPage: { $last: '$pageUrl' }
           }
         },
         {
@@ -50,6 +65,8 @@ router.get('/sessions', async (req, res) => {
             pageViewCount: 1,
             firstSeen: 1,
             lastSeen: 1,
+            entryPage: 1,
+            exitPage: 1,
             durationSeconds: {
               $round: [{ $divide: [{ $subtract: ['$lastSeen', '$firstSeen'] }, 1000] }, 0]
             }
@@ -94,15 +111,35 @@ router.get('/sessions/:sessionId/events', async (req, res) => {
     }
 
     // Retrieve session summary info
-    const session = await Session.findOne({ sessionId }).lean();
+    const rawSession = await Session.findOne({ sessionId }).lean();
 
     // Retrieve all events sorted by timestamp
     const events = await Event.find({ sessionId })
       .sort({ timestamp: 1 })
       .lean();
 
-    if (!events.length && !session) {
+    if (!events.length && !rawSession) {
       return res.status(404).json({ error: 'Session not found or has no recorded events' });
+    }
+
+    // Dynamic duration computation
+    let sessionSummary = rawSession;
+    if (sessionSummary) {
+      const first = sessionSummary.firstSeen ? new Date(sessionSummary.firstSeen).getTime() : 0;
+      const last = sessionSummary.lastSeen ? new Date(sessionSummary.lastSeen).getTime() : 0;
+      sessionSummary.durationSeconds = (first && last && last >= first)
+        ? Math.round((last - first) / 1000)
+        : 0;
+    } else {
+      const first = events[0]?.timestamp ? new Date(events[0].timestamp).getTime() : 0;
+      const last = events[events.length - 1]?.timestamp ? new Date(events[events.length - 1].timestamp).getTime() : 0;
+      sessionSummary = {
+        sessionId,
+        eventCount: events.length,
+        firstSeen: events[0]?.timestamp,
+        lastSeen: events[events.length - 1]?.timestamp,
+        durationSeconds: (first && last && last >= first) ? Math.round((last - first) / 1000) : 0
+      };
     }
 
     // Calculate step-by-step elapsed time
@@ -112,18 +149,13 @@ router.get('/sessions/:sessionId/events', async (req, res) => {
       return {
         ...ev,
         stepIndex: index + 1,
-        elapsedFromPrevMs: stepDeltaMs
+        elapsedFromPrevMs: Math.max(0, stepDeltaMs)
       };
     });
 
     return res.json({
       sessionId,
-      sessionSummary: session || {
-        sessionId,
-        eventCount: events.length,
-        firstSeen: events[0]?.timestamp,
-        lastSeen: events[events.length - 1]?.timestamp
-      },
+      sessionSummary,
       totalEvents: events.length,
       events: journey
     });

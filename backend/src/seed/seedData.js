@@ -10,6 +10,10 @@ async function seedAnalyticsData() {
   await Session.deleteMany({});
 
   const baseUrl = 'http://localhost:5000/demo';
+  const homePath = '/demo/index.html';
+  const productPath = '/demo/product.html';
+  const cartPath = '/demo/cart.html';
+
   const homeUrl = `${baseUrl}/index.html`;
   const productUrl = `${baseUrl}/product.html`;
   const cartUrl = `${baseUrl}/cart.html`;
@@ -20,7 +24,10 @@ async function seedAnalyticsData() {
     'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/121.0.0.0 Safari/537.36'
   ];
 
-  // Specific hotspots on the demo pages (x, y) coordinates with jitter
+  const docWidth = 1440;
+  const docHeight = 1350;
+
+  // Hotspots with coordinate positions and target metadata
   const homeHotspots = [
     { name: 'Hero CTA Button', x: 200, y: 310, tag: 'A', text: 'Explore Aura Pro X', weight: 35 },
     { name: 'Hero 20% Off', x: 380, y: 310, tag: 'BUTTON', text: 'Claim 20% Off', weight: 20 },
@@ -67,24 +74,28 @@ async function seedAnalyticsData() {
 
   for (let sIdx = 0; sIdx < sessionTemplates.length; sIdx++) {
     const tpl = sessionTemplates[sIdx];
-    const sessionStartTime = new Date(now - (sIdx + 1) * 18 * 60 * 1000); // spread across last few hours
+    const sessionStartTime = new Date(now - (sIdx + 1) * 18 * 60 * 1000);
     let currentTime = new Date(sessionStartTime.getTime());
     const ua = userAgents[sIdx % userAgents.length];
 
     let pageViewsCount = 0;
     let clicksCount = 0;
+    let customEventsCount = 0;
     let entryPage = '';
     let exitPage = '';
 
     for (const step of tpl.funnel) {
       let pageUrl = homeUrl;
+      let pagePath = homePath;
       let hotspots = homeHotspots;
 
       if (step === 'product') {
         pageUrl = productUrl;
+        pagePath = productPath;
         hotspots = productHotspots;
       } else if (step === 'cart') {
         pageUrl = cartUrl;
+        pagePath = cartPath;
         hotspots = cartHotspots;
       }
 
@@ -98,7 +109,11 @@ async function seedAnalyticsData() {
         sessionId: tpl.id,
         eventType: 'page_view',
         pageUrl,
+        pagePath,
+        pageHost: 'localhost:5000',
         timestamp: new Date(currentTime),
+        docWidth,
+        docHeight,
         viewport: { width: 1440, height: 900, scrollX: 0, scrollY: 0 },
         metadata: { userAgent: ua, title: `Aura Store - ${step}` }
       });
@@ -112,15 +127,26 @@ async function seedAnalyticsData() {
         const jitterX = Math.round((Math.random() - 0.5) * 35);
         const jitterY = Math.round((Math.random() - 0.5) * 20);
 
+        const clickX = spot.x + jitterX;
+        const clickY = spot.y + jitterY;
+        const xPct = Number((clickX / docWidth).toFixed(5));
+        const yPct = Number((clickY / docHeight).toFixed(5));
+
         allEvents.push({
           sessionId: tpl.id,
           eventType: 'click',
           pageUrl,
+          pagePath,
+          pageHost: 'localhost:5000',
           timestamp: new Date(currentTime),
-          x: spot.x + jitterX,
-          y: spot.y + jitterY,
-          clientX: spot.x + jitterX,
-          clientY: spot.y + jitterY,
+          x: clickX,
+          y: clickY,
+          xPct,
+          yPct,
+          docWidth,
+          docHeight,
+          clientX: clickX,
+          clientY: clickY,
           viewport: { width: 1440, height: 900, scrollX: 0, scrollY: 0 },
           target: {
             tagName: spot.tag,
@@ -134,26 +160,30 @@ async function seedAnalyticsData() {
 
     // If converted, add purchase custom event
     if (tpl.converted) {
+      customEventsCount++;
       currentTime = new Date(currentTime.getTime() + 2000);
       allEvents.push({
         sessionId: tpl.id,
-        eventType: 'conversion_purchase',
+        eventType: 'custom_event',
+        eventName: 'purchase_complete',
         pageUrl: cartUrl,
+        pagePath: cartPath,
+        pageHost: 'localhost:5000',
         timestamp: new Date(currentTime),
+        docWidth,
+        docHeight,
         metadata: { orderTotal: 516.24, userAgent: ua }
       });
     }
 
-    const durationSeconds = Math.round((currentTime.getTime() - sessionStartTime.getTime()) / 1000);
-
     allSessions.push({
       sessionId: tpl.id,
-      eventCount: pageViewsCount + clicksCount + (tpl.converted ? 1 : 0),
+      eventCount: pageViewsCount + clicksCount + customEventsCount,
       pageViewCount: pageViewsCount,
       clickCount: clicksCount,
+      customEventCount: customEventsCount,
       firstSeen: sessionStartTime,
       lastSeen: currentTime,
-      durationSeconds,
       entryPage,
       exitPage,
       userAgent: ua,

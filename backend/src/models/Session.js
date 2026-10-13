@@ -6,7 +6,8 @@ const SessionSchema = new mongoose.Schema({
     required: true,
     unique: true,
     index: true,
-    trim: true
+    trim: true,
+    maxlength: 128
   },
   eventCount: {
     type: Number,
@@ -20,6 +21,10 @@ const SessionSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
+  customEventCount: {
+    type: Number,
+    default: 0
+  },
   firstSeen: {
     type: Date,
     default: Date.now,
@@ -30,25 +35,25 @@ const SessionSchema = new mongoose.Schema({
     default: Date.now,
     index: true
   },
-  durationSeconds: {
-    type: Number,
-    default: 0
-  },
   entryPage: {
     type: String,
-    default: ''
+    default: '',
+    maxlength: 1024
   },
   exitPage: {
     type: String,
-    default: ''
+    default: '',
+    maxlength: 1024
   },
   userAgent: {
     type: String,
-    default: ''
+    default: '',
+    maxlength: 512
   },
   ip: {
     type: String,
-    default: ''
+    default: '',
+    maxlength: 100
   }
 }, {
   timestamps: true

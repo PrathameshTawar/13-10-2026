@@ -8,13 +8,17 @@ import {
   ExternalLink,
   Sliders,
   Eye,
-  Info
+  Info,
+  Smartphone,
+  Tablet,
+  Monitor
 } from 'lucide-react';
 import { api } from '../services/api';
 
 export default function HeatmapView() {
   const [pages, setPages] = useState([]);
   const [selectedUrl, setSelectedUrl] = useState('');
+  const [viewportFilter, setViewportFilter] = useState('all');
   const [clickData, setClickData] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -22,11 +26,17 @@ export default function HeatmapView() {
   // Visualization mode: 'dots' | 'gradient' | 'grid'
   const [viewMode, setViewMode] = useState('gradient');
   const [showPagePreview, setShowPagePreview] = useState(true);
-  const [radius, setRadius] = useState(28);
+  const [radius, setRadius] = useState(26);
   const [opacity, setOpacity] = useState(0.85);
   const [hoveredClick, setHoveredClick] = useState(null);
 
   const canvasRef = useRef(null);
+
+  // Dynamic canvas sizing based on page dimensions
+  const canvasWidth = 1200;
+  const docHeight = clickData?.pageDimensions?.docHeight || 1250;
+  const docWidth = clickData?.pageDimensions?.docWidth || 1440;
+  const canvasHeight = Math.max(800, Math.min(2400, Math.round((docHeight / docWidth) * canvasWidth)));
 
   // 1. Fetch available pages on mount
   useEffect(() => {
@@ -34,20 +44,20 @@ export default function HeatmapView() {
       const pageList = res.pages || [];
       setPages(pageList);
       if (pageList.length > 0 && !selectedUrl) {
-        setSelectedUrl(pageList[0].pageUrl);
+        setSelectedUrl(pageList[0].pageUrl || pageList[0].pagePath);
       }
     }).catch(err => {
       console.error('Failed to load page list:', err);
     });
   }, []);
 
-  // 2. Fetch click data whenever selectedUrl changes
+  // 2. Fetch click data whenever selectedUrl or viewportFilter changes
   useEffect(() => {
     if (!selectedUrl) return;
     setIsLoading(true);
     setError(null);
 
-    api.getClicks(selectedUrl)
+    api.getClicks(selectedUrl, viewportFilter)
       .then(res => {
         setClickData(res);
         setIsLoading(false);
@@ -56,9 +66,9 @@ export default function HeatmapView() {
         setError(err.message);
         setIsLoading(false);
       });
-  }, [selectedUrl]);
+  }, [selectedUrl, viewportFilter]);
 
-  // 3. Render Canvas Gradient Heatmap
+  // 3. Render Canvas Gradient Heatmap using normalized coordinates
   useEffect(() => {
     if (viewMode !== 'gradient' || !canvasRef.current || !clickData?.clicks?.length) {
       return;
@@ -77,21 +87,36 @@ export default function HeatmapView() {
     offscreen.height = height;
     const offCtx = offscreen.getContext('2d');
 
-    // Draw radial blur for each click
+    // Draw radial blur for each click using normalized xPct & yPct
     clickData.clicks.forEach(c => {
-      if (c.x == null || c.y == null) return;
-      const x = Math.min(width, Math.max(0, c.x));
-      const y = Math.min(height, Math.max(0, c.y));
+      let plotX = null;
+      let plotY = null;
+
+      if (c.xPct != null) {
+        plotX = c.xPct * width;
+      } else if (c.x != null) {
+        plotX = (c.x / (c.docWidth || 1440)) * width;
+      }
+
+      if (c.yPct != null) {
+        plotY = c.yPct * height;
+      } else if (c.y != null) {
+        plotY = (c.y / (c.docHeight || height)) * height;
+      }
+
+      if (plotX == null || plotY == null) return;
+      plotX = Math.min(width, Math.max(0, plotX));
+      plotY = Math.min(height, Math.max(0, plotY));
 
       const rad = radius;
-      const grad = offCtx.createRadialGradient(x, y, 0, x, y, rad);
+      const grad = offCtx.createRadialGradient(plotX, plotY, 0, plotX, plotY, rad);
       grad.addColorStop(0, 'rgba(0, 0, 0, 1)');
       grad.addColorStop(0.5, 'rgba(0, 0, 0, 0.4)');
       grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
 
       offCtx.fillStyle = grad;
       offCtx.beginPath();
-      offCtx.arc(x, y, rad, 0, Math.PI * 2);
+      offCtx.arc(plotX, plotY, rad, 0, Math.PI * 2);
       offCtx.fill();
     });
 
@@ -129,7 +154,7 @@ export default function HeatmapView() {
     }
 
     ctx.putImageData(imgData, 0, 0);
-  }, [clickData, viewMode, radius, opacity]);
+  }, [clickData, viewMode, radius, opacity, canvasHeight]);
 
   // Clean pathname for cleaner display
   function cleanUrl(url) {
@@ -142,11 +167,17 @@ export default function HeatmapView() {
     }
   }
 
+  // Build resilient preview URL (handles both local development and hosted deployments)
+  function getPreviewUrl(raw) {
+    if (!raw) return '';
+    const path = cleanUrl(raw);
+    // In dev or production, route to the host origin
+    return path.startsWith('/') ? path : `/${path}`;
+  }
+
   // Calculate 10x8 grid density cells for 'grid' mode
   const gridRows = 8;
   const gridCols = 10;
-  const canvasWidth = 1200;
-  const canvasHeight = 900;
   const cellWidth = canvasWidth / gridCols;
   const cellHeight = canvasHeight / gridRows;
 
@@ -156,9 +187,16 @@ export default function HeatmapView() {
     let maxCell = 0;
 
     clickData.clicks.forEach(c => {
-      if (c.x == null || c.y == null) return;
-      const col = Math.min(gridCols - 1, Math.max(0, Math.floor(c.x / cellWidth)));
-      const row = Math.min(gridRows - 1, Math.max(0, Math.floor(c.y / cellHeight)));
+      let xPct = c.xPct;
+      let yPct = c.yPct;
+
+      if (xPct == null && c.x != null) xPct = c.x / (c.docWidth || 1440);
+      if (yPct == null && c.y != null) yPct = c.y / (c.docHeight || 1200);
+
+      if (xPct == null || yPct == null) return;
+      const col = Math.min(gridCols - 1, Math.max(0, Math.floor(xPct * gridCols)));
+      const row = Math.min(gridRows - 1, Math.max(0, Math.floor(yPct * gridRows)));
+
       counts[row][col]++;
       if (counts[row][col] > maxCell) maxCell = counts[row][col];
     });
@@ -189,22 +227,36 @@ export default function HeatmapView() {
           {/* Page URL Selector */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>
-              Tracked Page:
+              Page:
             </span>
             <select
               value={selectedUrl}
               onChange={(e) => setSelectedUrl(e.target.value)}
               className="input-base"
-              style={{ minWidth: 320, fontWeight: 500 }}
+              style={{ minWidth: 280, fontWeight: 500 }}
             >
               {pages.map((p) => (
-                <option key={p.pageUrl} value={p.pageUrl}>
-                  {cleanUrl(p.pageUrl)} ({p.clicks || 0} clicks • {p.pageViews || 0} views)
+                <option key={p.pagePath || p.pageUrl} value={p.pageUrl || p.pagePath}>
+                  {cleanUrl(p.pagePath || p.pageUrl)} ({p.clicks || 0} clicks)
                 </option>
               ))}
               {pages.length === 0 && (
-                <option value="http://localhost:5000/demo/index.html">/demo/index.html</option>
+                <option value="/demo/index.html">/demo/index.html</option>
               )}
+            </select>
+
+            {/* Viewport Filter Dropdown */}
+            <select
+              value={viewportFilter}
+              onChange={(e) => setViewportFilter(e.target.value)}
+              className="input-base"
+              style={{ fontSize: 12, fontWeight: 500 }}
+              title="Filter clicks by screen resolution"
+            >
+              <option value="all">🖥️ All Viewports</option>
+              <option value="desktop">💻 Desktop (≥ 1024px)</option>
+              <option value="tablet">📱 Tablet (768px - 1023px)</option>
+              <option value="mobile">📱 Mobile (&lt; 768px)</option>
             </select>
           </div>
 
@@ -276,7 +328,7 @@ export default function HeatmapView() {
                 checked={showPagePreview}
                 onChange={(e) => setShowPagePreview(e.target.checked)}
               />
-              Show Page Context
+              Show Page Preview
             </label>
 
             {/* Slider controls */}
@@ -286,7 +338,7 @@ export default function HeatmapView() {
                 <input
                   type="range"
                   min="16"
-                  max="55"
+                  max="50"
                   value={radius}
                   onChange={(e) => setRadius(Number(e.target.value))}
                   style={{ width: 80, cursor: 'pointer' }}
@@ -309,14 +361,13 @@ export default function HeatmapView() {
         }}>
           {isLoading && (
             <div style={{ padding: 48, textAlign: 'center', color: 'var(--text-secondary)' }}>
-              Loading heatmap click coordinates...
+              Loading normalized click coordinates...
             </div>
           )}
 
           {!isLoading && clickData?.clicks?.length === 0 && (
             <div style={{ padding: 60, textAlign: 'center', color: 'var(--text-secondary)' }}>
-              No click events tracked for this URL yet. 
-              Open the store and click around, or click "Seed Demo" in the top bar!
+              No click events tracked for this page and viewport filter yet.
             </div>
           )}
 
@@ -332,10 +383,10 @@ export default function HeatmapView() {
               overflow: 'hidden',
               background: '#0f172a'
             }}>
-              {/* Optional Underlying Page Iframe Preview */}
+              {/* Underlying Page Iframe Preview (hosted-safe) */}
               {showPagePreview && selectedUrl && (
                 <iframe
-                  src={selectedUrl}
+                  src={getPreviewUrl(selectedUrl)}
                   title="Page Context"
                   style={{
                     position: 'absolute',
@@ -369,7 +420,7 @@ export default function HeatmapView() {
                 />
               )}
 
-              {/* Mode 2: Exact Dots View */}
+              {/* Mode 2: Exact Dots View with Normalized Mapping */}
               {viewMode === 'dots' && (
                 <div style={{
                   position: 'absolute',
@@ -380,16 +431,19 @@ export default function HeatmapView() {
                   zIndex: 3
                 }}>
                   {clickData.clicks.map((c, i) => {
-                    if (c.x == null || c.y == null) return null;
+                    const plotX = (c.xPct != null) ? (c.xPct * canvasWidth) : ((c.x / (c.docWidth || 1440)) * canvasWidth);
+                    const plotY = (c.yPct != null) ? (c.yPct * canvasHeight) : ((c.y / (c.docHeight || canvasHeight)) * canvasHeight);
+                    if (plotX == null || plotY == null) return null;
+
                     return (
                       <div
                         key={c._id || i}
-                        onMouseEnter={() => setHoveredClick(c)}
+                        onMouseEnter={() => setHoveredClick({ ...c, plotX, plotY })}
                         onMouseLeave={() => setHoveredClick(null)}
                         style={{
                           position: 'absolute',
-                          left: c.x - 7,
-                          top: c.y - 7,
+                          left: plotX - 7,
+                          top: plotY - 7,
                           width: 14,
                           height: 14,
                           borderRadius: '50%',
@@ -398,7 +452,7 @@ export default function HeatmapView() {
                           boxShadow: '0 0 10px rgba(239, 68, 68, 0.8)',
                           cursor: 'pointer',
                           transition: 'transform 0.15s',
-                          transform: hoveredClick === c ? 'scale(1.8)' : 'scale(1)'
+                          transform: hoveredClick?.c === c ? 'scale(1.8)' : 'scale(1)'
                         }}
                       />
                     );
@@ -457,8 +511,8 @@ export default function HeatmapView() {
               {hoveredClick && (
                 <div style={{
                   position: 'absolute',
-                  left: Math.min(canvasWidth - 220, Math.max(10, hoveredClick.x + 15)),
-                  top: Math.max(10, hoveredClick.y - 20),
+                  left: Math.min(canvasWidth - 240, Math.max(10, (hoveredClick.plotX || 0) + 15)),
+                  top: Math.max(10, (hoveredClick.plotY || 0) - 20),
                   background: '#090d16',
                   border: '1px solid var(--accent-primary)',
                   boxShadow: '0 8px 24px rgba(0,0,0,0.8)',
@@ -467,16 +521,17 @@ export default function HeatmapView() {
                   fontSize: 11,
                   zIndex: 100,
                   pointerEvents: 'none',
-                  minWidth: 180
+                  minWidth: 200
                 }}>
                   <div style={{ fontWeight: 700, color: '#38bdf8', marginBottom: 2 }}>
                     &lt;{hoveredClick.target?.tagName || 'ELEMENT'}&gt; {hoveredClick.target?.text || ''}
                   </div>
                   <div style={{ color: '#34d399', fontFamily: 'var(--font-mono)', fontSize: 10 }}>
-                    X: {hoveredClick.x}px • Y: {hoveredClick.y}px
+                    X: {hoveredClick.x}px ({hoveredClick.xPct != null ? (hoveredClick.xPct * 100).toFixed(1) : '-'}%)
+                    • Y: {hoveredClick.y}px ({hoveredClick.yPct != null ? (hoveredClick.yPct * 100).toFixed(1) : '-'}%)
                   </div>
                   <div style={{ color: 'var(--text-tertiary)', fontSize: 10, marginTop: 2 }}>
-                    Session: {hoveredClick.sessionId?.substring(0, 8)}...
+                    Viewport: {hoveredClick.viewport?.width || '-'}×{hoveredClick.viewport?.height || '-'}
                   </div>
                 </div>
               )}
@@ -490,7 +545,7 @@ export default function HeatmapView() {
           <div className="glass-panel" style={{ padding: 20 }}>
             <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
               <Flame size={16} color="#f59e0b" />
-              Page Density
+              Page Analytics
             </h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, fontSize: 13 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -498,11 +553,15 @@ export default function HeatmapView() {
                 <strong style={{ color: '#fff' }}>{clickData?.totalClicks || 0}</strong>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--text-secondary)' }}>Selected View</span>
-                <span style={{ color: '#a78bfa', fontWeight: 600, textTransform: 'capitalize' }}>{viewMode}</span>
+                <span style={{ color: 'var(--text-secondary)' }}>Normalized Width</span>
+                <span className="mono" style={{ color: '#cbd5e1' }}>{canvasWidth}px</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--text-secondary)' }}>Active Context</span>
+                <span style={{ color: 'var(--text-secondary)' }}>Canvas Height</span>
+                <span className="mono" style={{ color: '#cbd5e1' }}>{canvasHeight}px</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'var(--text-secondary)' }}>Path</span>
                 <span className="mono" style={{ color: '#38bdf8', fontSize: 11 }}>{cleanUrl(selectedUrl)}</span>
               </div>
             </div>
@@ -534,7 +593,6 @@ export default function HeatmapView() {
                           {item.count}
                         </span>
                       </div>
-                      {/* Bar indicator */}
                       <div style={{ height: 5, background: 'rgba(255,255,255,0.06)', borderRadius: 3, overflow: 'hidden' }}>
                         <div style={{
                           height: '100%',
@@ -550,15 +608,14 @@ export default function HeatmapView() {
             )}
           </div>
 
-          {/* Tips Card */}
+          {/* Heatmap Normalization Note */}
           <div className="glass-panel" style={{ padding: 18, background: 'rgba(30, 41, 59, 0.3)', fontSize: 12, color: 'var(--text-secondary)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, color: '#c4b5fd', marginBottom: 6 }}>
               <Info size={14} />
-              Heatmap Guide
+              Spatial Normalization
             </div>
             <p style={{ lineHeight: 1.5 }}>
-              Switch to <strong>Exact Dots</strong> to hover and inspect clicked DOM elements and coordinates. 
-              Switch to <strong>Density Grid</strong> to see spatial distribution across the layout.
+              Clicks are normalized as document percentage coordinates (<code>xPct</code> / <code>yPct</code>) rather than fixed pixel offsets. This ensures heatmaps scale accurately across varying viewport widths.
             </p>
           </div>
         </div>

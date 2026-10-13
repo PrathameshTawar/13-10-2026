@@ -5,12 +5,13 @@
  * Tracks:
  * - page_view (initial load & SPA navigation)
  * - click (with coordinate mapping & element metadata)
+ * - custom_event (custom interaction triggers)
  * 
  * Features:
  * - Persistent session tracking (localStorage with Cookie fallback)
  * - Session idle expiration (30-minute standard window)
- * - Screen & viewport resolution awareness for accurate heatmap normalization
- * - Resilient delivery via navigator.sendBeacon & fetch keepalive
+ * - Normalized coordinate percentages (xPct, yPct, docWidth, docHeight) for accurate multi-device heatmaps
+ * - Cross-origin resilient delivery via navigator.sendBeacon (text/plain) & fetch keepalive
  */
 
 (function (window, document) {
@@ -20,7 +21,7 @@
   if (window.__CAUSAL_TRACKER_LOADED__) return;
   window.__CAUSAL_TRACKER_LOADED__ = true;
 
-  // Configuration discovery (via current script tag attributes or default)
+  // Configuration discovery (via current script tag attributes or global)
   const currentScript = document.currentScript || (function () {
     const scripts = document.getElementsByTagName('script');
     return scripts[scripts.length - 1];
@@ -114,10 +115,10 @@
     const payload = JSON.stringify(events.length === 1 ? events[0] : events);
     const url = config.endpoint;
 
-    // Use sendBeacon for unload resilience
+    // Use sendBeacon with text/plain to avoid CORS preflight rejection across origins
     if (navigator.sendBeacon) {
       try {
-        const blob = new Blob([payload], { type: 'application/json' });
+        const blob = new Blob([payload], { type: 'text/plain' });
         const success = navigator.sendBeacon(url, blob);
         if (success) {
           log('Sent via sendBeacon:', events.length, 'events');
@@ -145,7 +146,7 @@
     sendEvents(toSend);
   }
 
-  function enqueueEvent(eventData, immediate = false) {
+  function enqueueEvent(eventData, immediate) {
     updateSessionActivity(currentSessionId);
     eventQueue.push(eventData);
 
@@ -170,27 +171,48 @@
     }
 
     let text = (target.innerText || target.textContent || '').trim().replace(/\s+/g, ' ');
-    if (text.length > 60) text = text.substring(0, 57) + '...';
+    if (text.length > 70) text = text.substring(0, 67) + '...';
 
     return {
       tagName: target.tagName ? target.tagName.toUpperCase() : 'UNKNOWN',
-      id: target.id || undefined,
-      className: typeof target.className === 'string' ? target.className.trim() : undefined,
+      id: target.id ? target.id.substring(0, 80) : undefined,
+      className: typeof target.className === 'string' ? target.className.trim().substring(0, 100) : undefined,
       text: text || undefined,
       href: target.getAttribute('href') || (target.closest('a') ? target.closest('a').getAttribute('href') : undefined),
       dataRole: target.getAttribute('data-role') || target.getAttribute('data-track') || undefined
     };
   }
 
+  // --- Coordinate & Document Metrics ---
+  function getDocDimensions() {
+    const doc = document.documentElement;
+    const body = document.body;
+    const docWidth = Math.max(
+      doc ? doc.scrollWidth : 0,
+      body ? body.scrollWidth : 0,
+      window.innerWidth || 0
+    );
+    const docHeight = Math.max(
+      doc ? doc.scrollHeight : 0,
+      body ? body.scrollHeight : 0,
+      window.innerHeight || 0
+    );
+    return { docWidth, docHeight };
+  }
+
   // --- Event Collectors ---
 
   function trackPageView(customUrl) {
     const pageUrl = customUrl || window.location.href;
+    const { docWidth, docHeight } = getDocDimensions();
+
     const event = {
       session_id: currentSessionId,
       event_type: 'page_view',
       page_url: pageUrl,
       timestamp: new Date().toISOString(),
+      docWidth: Math.round(docWidth),
+      docHeight: Math.round(docHeight),
       viewport: {
         width: window.innerWidth,
         height: window.innerHeight,
@@ -206,11 +228,15 @@
   }
 
   function handleClick(e) {
-    // Collect coordinates: both viewport-relative (clientX/Y) and document-relative (pageX/Y)
+    // Collect coordinates: viewport-relative (clientX/Y) and document-relative (pageX/Y)
     const clientX = e.clientX;
     const clientY = e.clientY;
     const pageX = e.pageX !== undefined ? e.pageX : (clientX + (window.scrollX || window.pageXOffset || 0));
     const pageY = e.pageY !== undefined ? e.pageY : (clientY + (window.scrollY || window.pageYOffset || 0));
+
+    const { docWidth, docHeight } = getDocDimensions();
+    const xPct = docWidth > 0 ? Number((pageX / docWidth).toFixed(5)) : null;
+    const yPct = docHeight > 0 ? Number((pageY / docHeight).toFixed(5)) : null;
 
     const elementInfo = getElementDetails(e.target);
 
@@ -219,8 +245,12 @@
       event_type: 'click',
       page_url: window.location.href,
       timestamp: new Date().toISOString(),
-      x: Math.round(pageX), // Document-relative X for heatmap placement
-      y: Math.round(pageY), // Document-relative Y for heatmap placement
+      x: Math.round(pageX), // Document-relative X
+      y: Math.round(pageY), // Document-relative Y
+      xPct: xPct,           // Normalized X percentage (0 to 1)
+      yPct: yPct,           // Normalized Y percentage (0 to 1)
+      docWidth: Math.round(docWidth),
+      docHeight: Math.round(docHeight),
       clientX: Math.round(clientX),
       clientY: Math.round(clientY),
       viewport: {
@@ -293,12 +323,16 @@
       return currentSessionId;
     },
     trackPageView: trackPageView,
-    trackCustomEvent: function (eventType, customData) {
+    trackCustomEvent: function (eventName, customData) {
+      const { docWidth, docHeight } = getDocDimensions();
       const event = Object.assign({
         session_id: currentSessionId,
-        event_type: eventType,
+        event_type: 'custom_event',
+        event_name: eventName,
         page_url: window.location.href,
         timestamp: new Date().toISOString(),
+        docWidth: Math.round(docWidth),
+        docHeight: Math.round(docHeight),
         viewport: {
           width: window.innerWidth,
           height: window.innerHeight
