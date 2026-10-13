@@ -1,0 +1,24 @@
+{
+  "name": "causalfunnel-user-analytics",
+  "version": "1.0.0",
+  "description": "User Interaction Tracking & Analytics Platform built for CausalFunnel",
+  "scripts": {
+    "start": "node backend/src/server.js",
+    "server": "node backend/src/server.js",
+    "client": "npm --prefix frontend run dev",
+    "seed": "node backend/src/seed/seedData.js",
+    "build:client": "npm --prefix frontend run build",
+    "install:all": "npm --prefix backend install && npm --prefix frontend install"
+  },
+  "keywords": [
+    "analytics",
+    "session-tracking",
+    "heatmap",
+    "user-journey",
+    "mongodb",
+    "nodejs",
+    "react"
+  ],
+  "author": "Full Stack Engineer Candidate",
+  "license": "ISC"
+}
