@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Your Shopping Cart - Aura Store</title>
+  <link rel="stylesheet" href="demo.css">
+  <style>
+    .cart-grid {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 32px;
+      margin-top: 24px;
+    }
+    .cart-item {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 20px;
+      display: flex;
+      gap: 20px;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+    .cart-summary {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 24px;
+      height: fit-content;
+    }
+    .summary-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 12px;
+      font-size: 14px;
+      color: var(--text-muted);
+    }
+    .summary-row.total {
+      border-top: 1px solid var(--border-color);
+      padding-top: 16px;
+      font-size: 18px;
+      font-weight: 700;
+      color: white;
+    }
+  </style>
+</head>
+<body>
+  <!-- Header -->
+  <header class="header">
+    <a href="index.html" class="logo">
+      <span>⚡ AuraStore</span>
+    </a>
+    <ul class="nav-links">
+      <li><a href="index.html">Home</a></li>
+      <li><a href="product.html">Featured Item</a></li>
+      <li><a href="cart.html" class="active">My Cart</a></li>
+    </ul>
+    <div class="nav-actions">
+      <input type="text" id="search-input" class="search-input" placeholder="Search gadgets...">
+      <a href="cart.html" id="nav-cart-btn" class="cart-btn">
+        🛒 Cart <span class="cart-count">2</span>
+      </a>
+    </div>
+  </header>
+
+  <div class="container">
+    <h1>Your Shopping Cart</h1>
+    <div class="cart-grid">
+      <!-- Items Column -->
+      <div>
+        <div class="cart-item" id="cart-item-1">
+          <div style="font-size: 40px; background: #1e293b; padding: 12px; border-radius: 8px;">🎧</div>
+          <div style="flex: 1;">
+            <h3>Aura Pro X Wireless Headphones</h3>
+            <p style="color: #94a3b8; font-size: 13px;">Color: Midnight Slate • Qty: 1</p>
+          </div>
+          <div style="font-size: 18px; font-weight: 700; color: #38bdf8;">$299.00</div>
+          <button id="remove-item-1" style="background: none; border: none; color: #ef4444; cursor: pointer;" onclick="alert('Removed item')">✕</button>
+        </div>
+
+        <div class="cart-item" id="cart-item-2">
+          <div style="font-size: 40px; background: #1e293b; padding: 12px; border-radius: 8px;">⌨️</div>
+          <div style="flex: 1;">
+            <h3>CyberKey Low-Profile Mech</h3>
+            <p style="color: #94a3b8; font-size: 13px;">Switch: Gateron Optical • Qty: 1</p>
+          </div>
+          <div style="font-size: 18px; font-weight: 700; color: #38bdf8;">$179.00</div>
+          <button id="remove-item-2" style="background: none; border: none; color: #ef4444; cursor: pointer;" onclick="alert('Removed item')">✕</button>
+        </div>
+      </div>
+
+      <!-- Checkout Summary Column -->
+      <div class="cart-summary">
+        <h2 style="font-size: 18px; margin-bottom: 20px;">Order Summary</h2>
+        <div class="summary-row">
+          <span>Subtotal</span>
+          <span>$478.00</span>
+        </div>
+        <div class="summary-row">
+          <span>Estimated Shipping</span>
+          <span style="color: #10b981;">FREE</span>
+        </div>
+        <div class="summary-row">
+          <span>Taxes</span>
+          <span>$38.24</span>
+        </div>
+        <div class="summary-row total">
+          <span>Total</span>
+          <span>$516.24</span>
+        </div>
+
+        <div style="margin: 20px 0;">
+          <input type="text" id="coupon-input" placeholder="Promo code (e.g. WELCOME)" style="width: 100%; padding: 10px; background: #0f172a; border: 1px solid var(--border-color); border-radius: 8px; color: white; margin-bottom: 8px;">
+          <button id="apply-promo-btn" style="width: 100%; padding: 8px; background: var(--bg-secondary); border: 1px solid var(--border-color); color: white; border-radius: 8px; cursor: pointer;" onclick="alert('Coupon applied! 10% discount.')">Apply Code</button>
+        </div>
+
+        <button id="checkout-btn" class="btn-primary" style="width: 100%; text-align: center; padding: 14px;" onclick="checkoutOrder()">
+          Complete Order →
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Floating Active Tracking Indicator -->
+  <div class="tracking-badge" id="tracking-badge">
+    <div class="tracking-pulse"></div>
+    <div>
+      <div><strong>Live Tracking Active</strong></div>
+      <div style="color: #94a3b8; font-size: 11px;">Session: <span id="session-display" style="color: #67e8f9; font-family: monospace;">detecting...</span></div>
+    </div>
+    <a href="http://localhost:5173" target="_blank" class="dashboard-link-btn">Open Dashboard ↗</a>
+  </div>
+
+  <script src="/tracker.js" data-endpoint="/api/events" data-debug="true"></script>
+  <script>
+    function checkoutOrder() {
+      if (window.CausalTracker) {
+        window.CausalTracker.trackCustomEvent('conversion_purchase', {
+          order_total: 516.24,
+          items_count: 2
+        });
+      }
+      alert('Order placed successfully! Custom event tracked.');
+    }
+    window.addEventListener('load', function() {
+      setTimeout(function() {
+        if (window.CausalTracker) {
+          const sess = window.CausalTracker.getSessionId();
+          document.getElementById('session-display').innerText = sess ? sess.substring(0, 14) + '...' : 'Active';
+        }
+      }, 200);
+    });
+  </script>
+</body>
+</html>
