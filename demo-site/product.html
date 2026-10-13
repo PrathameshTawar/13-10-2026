@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Aura Pro X Headphones - Aura Store</title>
+  <link rel="stylesheet" href="demo.css">
+  <style>
+    .product-detail-layout {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 48px;
+      margin-top: 24px;
+    }
+    .gallery-box {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      padding: 40px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    .main-emoji {
+      font-size: 140px;
+      margin-bottom: 24px;
+    }
+    .thumb-row {
+      display: flex;
+      gap: 16px;
+    }
+    .thumb-btn {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      padding: 8px 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      color: white;
+      font-size: 20px;
+    }
+    .color-swatches {
+      display: flex;
+      gap: 12px;
+      margin: 16px 0;
+    }
+    .swatch {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      cursor: pointer;
+      border: 2px solid transparent;
+      transition: transform 0.2s;
+    }
+    .swatch.selected {
+      border-color: #fff;
+      transform: scale(1.15);
+    }
+    .spec-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 24px;
+      font-size: 14px;
+    }
+    .spec-table td {
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border-color);
+      color: var(--text-muted);
+    }
+    .spec-table td:last-child {
+      color: #fff;
+      text-align: right;
+    }
+  </style>
+</head>
+<body>
+  <!-- Header -->
+  <header class="header">
+    <a href="index.html" class="logo">
+      <span>⚡ AuraStore</span>
+    </a>
+    <ul class="nav-links">
+      <li><a href="index.html">Home</a></li>
+      <li><a href="product.html" class="active">Featured Item</a></li>
+      <li><a href="cart.html">My Cart</a></li>
+    </ul>
+    <div class="nav-actions">
+      <input type="text" id="search-input" class="search-input" placeholder="Search gadgets...">
+      <a href="cart.html" id="nav-cart-btn" class="cart-btn">
+        🛒 Cart <span class="cart-count" id="cart-counter">2</span>
+      </a>
+    </div>
+  </header>
+
+  <div class="container">
+    <div style="margin-bottom: 16px;">
+      <a href="index.html" style="color: #94a3b8; text-decoration: none; font-size: 13px;">← Back to catalog</a>
+    </div>
+
+    <div class="product-detail-layout">
+      <!-- Visual Gallery -->
+      <div class="gallery-box">
+        <div class="main-emoji" id="main-view-icon">🎧</div>
+        <div class="thumb-row">
+          <button class="thumb-btn" onclick="setIcon('🎧')">🎧 Front</button>
+          <button class="thumb-btn" onclick="setIcon('🎙️')">🎙️ Mic</button>
+          <button class="thumb-btn" onclick="setIcon('📦')">📦 Box</button>
+        </div>
+      </div>
+
+      <!-- Specs & Action -->
+      <div>
+        <span class="hero-badge">Flagship Audio</span>
+        <h1 style="font-size: 32px; margin: 12px 0;">Aura Pro X Wireless Headphones</h1>
+        <p style="color: #94a3b8; font-size: 15px; line-height: 1.5; margin-bottom: 20px;">
+          Engineered with custom 45mm beryllium drivers and hybrid active noise cancellation. 
+          Seamless multi-point Bluetooth 5.4 with lossless LDAC audio codecs.
+        </p>
+
+        <div style="font-size: 28px; font-weight: 800; color: #38bdf8; margin-bottom: 20px;">
+          $299.00 <span style="font-size: 14px; color: #94a3b8; font-weight: normal; text-decoration: line-through;">$349.00</span>
+        </div>
+
+        <div style="margin-bottom: 20px;">
+          <label style="font-size: 13px; color: #94a3b8; display: block; margin-bottom: 8px;">Select Finish:</label>
+          <div class="color-swatches">
+            <div class="swatch selected" style="background: #1e293b;" onclick="selectColor(this, 'Midnight Slate')" title="Midnight Slate"></div>
+            <div class="swatch" style="background: #94a3b8;" onclick="selectColor(this, 'Lunar Silver')" title="Lunar Silver"></div>
+            <div class="swatch" style="background: #7c3aed;" onclick="selectColor(this, 'Ultraviolet')" title="Ultraviolet"></div>
+          </div>
+          <span id="selected-color-label" style="font-size: 13px; color: #cbd5e1;">Midnight Slate</span>
+        </div>
+
+        <div style="display: flex; gap: 16px; align-items: center; margin-bottom: 30px;">
+          <div style="display: flex; align-items: center; border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden;">
+            <button style="padding: 10px 16px; background: var(--bg-secondary); border: none; color: white; cursor: pointer;" onclick="changeQty(-1)">-</button>
+            <span id="qty-val" style="padding: 10px 18px; font-weight: 600;">1</span>
+            <button style="padding: 10px 16px; background: var(--bg-secondary); border: none; color: white; cursor: pointer;" onclick="changeQty(1)">+</button>
+          </div>
+          <button id="detail-add-cart-btn" class="btn-primary" style="flex: 1;" onclick="handleAddToCart()">
+            Add to Bag • $299
+          </button>
+        </div>
+
+        <table class="spec-table">
+          <tr><td>Driver Unit</td><td>45mm Beryllium Dynamic</td></tr>
+          <tr><td>Battery Life</td><td>48 Hours (ANC On)</td></tr>
+          <tr><td>Connectivity</td><td>Bluetooth 5.4, USB-C Lossless</td></tr>
+          <tr><td>Warranty</td><td>2-Year Aura Care Included</td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Floating Active Tracking Indicator -->
+  <div class="tracking-badge" id="tracking-badge">
+    <div class="tracking-pulse"></div>
+    <div>
+      <div><strong>Live Tracking Active</strong></div>
+      <div style="color: #94a3b8; font-size: 11px;">Session: <span id="session-display" style="color: #67e8f9; font-family: monospace;">detecting...</span></div>
+    </div>
+    <a href="http://localhost:5173" target="_blank" class="dashboard-link-btn">Open Dashboard ↗</a>
+  </div>
+
+  <script src="/tracker.js" data-endpoint="/api/events" data-debug="true"></script>
+  <script>
+    let qty = 1;
+    function changeQty(diff) {
+      qty = Math.max(1, qty + diff);
+      document.getElementById('qty-val').innerText = qty;
+    }
+    function setIcon(icon) {
+      document.getElementById('main-view-icon').innerText = icon;
+    }
+    function selectColor(el, name) {
+      document.querySelectorAll('.swatch').forEach(s => s.classList.remove('selected'));
+      el.classList.add('selected');
+      document.getElementById('selected-color-label').innerText = name;
+    }
+    function handleAddToCart() {
+      alert(`Added ${qty} Aura Pro X to cart!`);
+      const counter = document.getElementById('cart-counter');
+      counter.innerText = parseInt(counter.innerText || '0') + qty;
+    }
+    window.addEventListener('load', function() {
+      setTimeout(function() {
+        if (window.CausalTracker) {
+          const sess = window.CausalTracker.getSessionId();
+          document.getElementById('session-display').innerText = sess ? sess.substring(0, 14) + '...' : 'Active';
+        }
+      }, 200);
+    });
+  </script>
+</body>
+</html>

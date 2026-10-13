@@ -1,0 +1,19 @@
+{
+  "name": "causalfunnel-analytics-backend",
+  "version": "1.0.0",
+  "description": "User Interaction Tracking & Analytics Backend with MongoDB",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node src/server.js",
+    "seed": "node src/seed/seedData.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "mongodb-memory-server": "^10.1.3",
+    "mongoose": "^8.9.5",
+    "morgan": "^1.10.0"
+  }
+}

@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Aura Store - Next-Gen Tech & Gear</title>
+  <link rel="stylesheet" href="demo.css">
+</head>
+<body>
+  <!-- Header -->
+  <header class="header">
+    <a href="index.html" class="logo">
+      <span>⚡ AuraStore</span>
+    </a>
+    <ul class="nav-links">
+      <li><a href="index.html" class="active">Home</a></li>
+      <li><a href="product.html">Featured Item</a></li>
+      <li><a href="cart.html">My Cart</a></li>
+    </ul>
+    <div class="nav-actions">
+      <input type="text" id="search-input" class="search-input" placeholder="Search gadgets, audio...">
+      <a href="cart.html" id="nav-cart-btn" class="cart-btn">
+        🛒 Cart <span class="cart-count" id="cart-counter">2</span>
+      </a>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <div class="container">
+    <!-- Hero Banner -->
+    <section class="hero">
+      <div class="hero-text">
+        <span class="hero-badge">Spring 2026 Collection</span>
+        <h1>Audio Crafted for Spatial Precision</h1>
+        <p>Experience studio-grade acoustic isolation with ultra-low latency wireless streaming.</p>
+        <div>
+          <a href="product.html" id="hero-cta-btn" class="btn-primary">Explore Aura Pro X</a>
+          <button id="hero-secondary-btn" class="btn-secondary" onclick="alert('Added demo coupon CODE20!')">Claim 20% Off</button>
+        </div>
+      </div>
+      <div style="font-size: 90px; text-align: center; padding: 20px;">
+        🎧
+      </div>
+    </section>
+
+    <!-- Filters -->
+    <div class="filters">
+      <button class="filter-chip active" data-category="all">All Products</button>
+      <button class="filter-chip" data-category="audio">Spatial Audio</button>
+      <button class="filter-chip" data-category="wearables">Smart Wearables</button>
+      <button class="filter-chip" data-category="peripherals">Peripherals</button>
+      <button class="filter-chip" data-category="power">MagSafe Power</button>
+    </div>
+
+    <!-- Featured Products Grid -->
+    <div class="section-title">
+      <h2>Trending Hardware</h2>
+      <span style="font-size: 13px; color: #94a3b8;">Showing 4 top items</span>
+    </div>
+
+    <div class="product-grid">
+      <!-- Product 1 -->
+      <div class="product-card" id="card-product-1">
+        <div class="product-img-box">🎧</div>
+        <a href="product.html" class="product-title">Aura Pro X Wireless Headphones</a>
+        <p style="font-size: 13px; color: #94a3b8; margin-bottom: 12px;">Active ANC with 48h spatial battery</p>
+        <div class="product-meta">
+          <span class="product-price">$299</span>
+          <button class="btn-add-cart" id="btn-add-pro-x" onclick="addToCart('Aura Pro X')">+ Add to Cart</button>
+        </div>
+      </div>
+
+      <!-- Product 2 -->
+      <div class="product-card" id="card-product-2">
+        <div class="product-img-box">⌚</div>
+        <a href="product.html" class="product-title">Pulse Chrono Smartwatch</a>
+        <p style="font-size: 13px; color: #94a3b8; margin-bottom: 12px;">Sapphire OLED, 7-day biometric tracking</p>
+        <div class="product-meta">
+          <span class="product-price">$349</span>
+          <button class="btn-add-cart" id="btn-add-pulse" onclick="addToCart('Pulse Chrono')">+ Add to Cart</button>
+        </div>
+      </div>
+
+      <!-- Product 3 -->
+      <div class="product-card" id="card-product-3">
+        <div class="product-img-box">⌨️</div>
+        <a href="product.html" class="product-title">CyberKey Low-Profile Mech</a>
+        <p style="font-size: 13px; color: #94a3b8; margin-bottom: 12px;">CNC Aluminum, Gateron Optical switches</p>
+        <div class="product-meta">
+          <span class="product-price">$179</span>
+          <button class="btn-add-cart" id="btn-add-cyberkey" onclick="addToCart('CyberKey Mech')">+ Add to Cart</button>
+        </div>
+      </div>
+
+      <!-- Product 4 -->
+      <div class="product-card" id="card-product-4">
+        <div class="product-img-box">🔋</div>
+        <a href="product.html" class="product-title">AeroCharge 140W GaN Station</a>
+        <p style="font-size: 13px; color: #94a3b8; margin-bottom: 12px;">Quad USB-C PD 3.1 rapid charging</p>
+        <div class="product-meta">
+          <span class="product-price">$89</span>
+          <button class="btn-add-cart" id="btn-add-aerocharge" onclick="addToCart('AeroCharge GaN')">+ Add to Cart</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Floating Active Tracking Indicator -->
+  <div class="tracking-badge" id="tracking-badge">
+    <div class="tracking-pulse"></div>
+    <div>
+      <div><strong>Live Tracking Active</strong></div>
+      <div style="color: #94a3b8; font-size: 11px;">Session: <span id="session-display" style="color: #67e8f9; font-family: monospace;">detecting...</span></div>
+    </div>
+    <a href="http://localhost:5173" target="_blank" class="dashboard-link-btn">Open Dashboard ↗</a>
+  </div>
+
+  <!-- Tracker Embedded Script -->
+  <script src="/tracker.js" data-endpoint="/api/events" data-debug="true"></script>
+
+  <script>
+    let cartCount = 2;
+    function addToCart(item) {
+      cartCount++;
+      document.getElementById('cart-counter').innerText = cartCount;
+      alert('Added ' + item + ' to cart!');
+    }
+
+    // Display session ID once tracker initializes
+    window.addEventListener('load', function() {
+      setTimeout(function() {
+        if (window.CausalTracker) {
+          const sess = window.CausalTracker.getSessionId();
+          document.getElementById('session-display').innerText = sess ? sess.substring(0, 14) + '...' : 'Active';
+        }
+      }, 200);
+    });
+
+    // Interactive category filter toggles
+    document.querySelectorAll('.filter-chip').forEach(btn => {
+      btn.addEventListener('click', function() {
+        document.querySelectorAll('.filter-chip').forEach(b => b.classList.remove('active'));
+        this.classList.add('active');
+      });
+    });
+  </script>
+</body>
+</html>
